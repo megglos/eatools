@@ -13,6 +13,7 @@ public abstract class AbtractEaTestCase extends TestCase {
 
     protected void setUp() throws Exception {
         super.setUp();
+        EaApplicationProperties.init();
         File modelFile = new File(EaApplicationProperties.EA_PROJECT.value());
         eaRepo = new EaRepo(modelFile);
         eaRepo.open();
