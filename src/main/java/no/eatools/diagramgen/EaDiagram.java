@@ -1,22 +1,22 @@
 package no.eatools.diagramgen;
 
-import no.eatools.util.EaApplicationProperties;
-import no.eatools.util.IntCounter;
-import no.eatools.util.SystemProperties;
-import org.apache.commons.lang.StringUtils;
-import org.apache.log4j.Logger;
-import org.sparx.Diagram;
-import org.sparx.Package;
-
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import no.eatools.util.EaApplicationProperties;
+import no.eatools.util.IntCounter;
+import no.eatools.util.SystemProperties;
+
+import org.apache.commons.lang.StringUtils;
+import org.apache.log4j.Logger;
+import org.sparx.Diagram;
+import org.sparx.Package;
 
 /**
- * A Wrapper class to facilitate  Diagram generation and manipulation.
- *
+ * A Wrapper class to facilitate Diagram generation and manipulation.
+ * 
  * @author Per Spilling (per.spilling@objectware.no)
  */
 public class EaDiagram {
@@ -26,40 +26,84 @@ public class EaDiagram {
     private EaRepo eaRepo;
     private String logicalPathname;
 
-
     /**
-     * Generate all diagrams from the model into the directory path.
+     * Generate all diagrams from the model into the directory configured in the properties.
      * The package structure of the model is retained as directory structure.
      * All existing diagrams are overwritten.
+     * 
+     * @param eaRepo the ea repo
+     * @return the int
      */
     public static int generateAll(EaRepo eaRepo) {
+        return generateAll(eaRepo, EaApplicationProperties.EA_DOC_ROOT_DIR.value());
+    }
+
+    /**
+     * Generate all diagrams from the model into the specified output directory.
+     * The package structure of the model is retained as directory structure.
+     * All existing diagrams are overwritten.
+     * 
+     * @param eaRepo the ea repo
+     * @param outputDir the output dir
+     * @return the int
+     */
+    public static int generateAll(EaRepo eaRepo, String outputDir) {
         IntCounter count = new IntCounter();
-        generateAllDiagrams(eaRepo, eaRepo.getRootPackage(), count);
+        generateAllDiagrams(eaRepo, outputDir, eaRepo.getRootPackage(), count);
         return count.count;
     }
 
     /**
      * Recursive method that finds all diagrams in a package and writes them to file.
-     *
+     * 
      * @param repo
      * @param pkg
      * @param diagramCount
      */
-    private static void generateAllDiagrams(EaRepo repo, Package pkg, IntCounter diagramCount) {
-        List<EaDiagram> diagrams = findDiagramsInPackage(repo, pkg);
+    private static void generateAllDiagrams(EaRepo repo, String customOutputDir, Package pkg, IntCounter diagramCount) {
+        final List<EaDiagram> diagrams = findDiagramsInPackage(repo, pkg);
+        final String outputDir = customOutputDir != null ? customOutputDir : EaApplicationProperties.EA_DOC_ROOT_DIR.value();
         if (diagrams.size() > 0) {
             log.debug("Generating diagrams in package: " + pkg.GetName());
             diagramCount.count = diagramCount.count + diagrams.size();
             for (EaDiagram d : diagrams) {
                 log.debug("Generating diagrams: " + d.getFilename());
-                d.writeImageToFile();
+                d.writeImageToFile(outputDir);
             }
         }
         for (Package p : pkg.GetPackages()) {
-            generateAllDiagrams(repo, p, diagramCount);
+            generateAllDiagrams(repo, outputDir, p, diagramCount);
         }
     }
 
+    /**
+     * Generate specific diagram.
+     * 
+     * @param eaRepo the ea repo
+     * @param customOutputDir the custom output dir
+     */
+    public static void generateSpecificDiagram(final EaRepo eaRepo, final String customOutputDir) {
+        final String diagramName = EaApplicationProperties.EA_DIAGRAM_TO_GENERATE.value();
+        final EaDiagram diagram = EaDiagram.findDiagram(eaRepo, diagramName);
+        final String outputDir = customOutputDir != null ? customOutputDir : EaApplicationProperties.EA_DOC_ROOT_DIR.value();
+        if (diagram != null) {
+            if (outputDir != null) {
+                diagram.writeImageToFile(outputDir);
+            } else {
+                diagram.writeImageToFile(outputDir);
+            }
+        } else {
+            log.info("diagram '" + diagramName + "' not found");
+        }
+    }
+
+    /**
+     * Find diagram.
+     * 
+     * @param eaRepo the ea repo
+     * @param diagramName the diagram name
+     * @return the ea diagram
+     */
     public static EaDiagram findDiagram(EaRepo eaRepo, String diagramName) {
         return findDiagram(eaRepo, eaRepo.getRootPackage(), diagramName, true);
     }
@@ -120,9 +164,10 @@ public class EaDiagram {
     /**
      * Find all UML diagrams inside a specific Package. Non-recursive, searches the top-level (given)
      * package only.
-     *
+     * 
+     * @param eaRepo the ea repo
      * @param pkg the Package to serach in.
-     * @return
+     * @return the list
      */
     public static List<EaDiagram> findDiagramsInPackage(EaRepo eaRepo, Package pkg) {
         if (pkg == null) {
@@ -135,12 +180,27 @@ public class EaDiagram {
         return result;
     }
 
+    /**
+     * Instantiates a new ea diagram.
+     * 
+     * @param repository the repository
+     * @param diagram the diagram
+     * @param pathName the path name
+     */
     public EaDiagram(EaRepo repository, Diagram diagram, String pathName) {
         eaDiagram = diagram;
         eaRepo = repository;
         logicalPathname = pathName;
     }
 
+    /**
+     * Instantiates a new ea diagram.
+     * 
+     * @param repository the repository
+     * @param diagram the diagram
+     * @param pathName the path name
+     * @param imageFormat the image format
+     */
     public EaDiagram(EaRepo repository, Diagram diagram, String pathName, ImageFileFormat imageFormat) {
         eaDiagram = diagram;
         eaRepo = repository;
@@ -148,15 +208,38 @@ public class EaDiagram {
         defaultImageFormat = imageFormat;
     }
 
-    public boolean writeImageToFile() {
-        return writeImageToFile(defaultImageFormat);
+    /**
+     * Write image to file.
+     * 
+     * @param outputPath the output path
+     * @return true, if successful
+     */
+    public boolean writeImageToFile(final String outputPath) {
+        return writeImageToFile(outputPath, defaultImageFormat);
     }
 
-    public boolean writeImageToFile(ImageFileFormat imageFileFormat) {
+    /**
+     * Write image to file.
+     * 
+     * @param imageFileFormat the image file format
+     * @return true, if successful
+     */
+    public boolean writeImageToFile(final ImageFileFormat imageFileFormat) {
+        return writeImageToFile(EaApplicationProperties.EA_DOC_ROOT_DIR.value(), imageFileFormat);
+    }
+
+    /**
+     * Write image to file.
+     * 
+     * @param outputPath the output path
+     * @param imageFileFormat the image file format
+     * @return true, if successful
+     */
+    public boolean writeImageToFile(final String outputPath, final ImageFileFormat imageFileFormat) {
         // make sure the directory exists
-        File f = new File(getAbsolutePathName());
+        File f = new File(getAbsolutePathName(outputPath));
         f.mkdirs();
-        String diagramFileName = getAbsoluteFilename();
+        String diagramFileName = getAbsoluteFilename(outputPath);
         if (eaRepo.getProject().PutDiagramImageToFile(eaDiagram.GetDiagramGUID(), diagramFileName, imageFileFormat.isRaster())) {
             log.info("Diagram generated at: " + diagramFileName);
             return true;
@@ -170,15 +253,27 @@ public class EaDiagram {
         return logicalPathname;
     }
 
-    public String getAbsolutePathName() {
-        return makeWebFriendlyFilename(EaApplicationProperties.EA_DOC_ROOT_DIR.value() + logicalPathname);
+    /**
+     * Gets the absolute path name.
+     * 
+     * @param path the path
+     * @return the absolute path name
+     */
+    public String getAbsolutePathName(final String path) {
+        return makeWebFriendlyFilename(path + logicalPathname);
     }
 
     public String getFilename() {
         return makeWebFriendlyFilename(eaDiagram.GetName() + defaultImageFormat.getFileExtension());
     }
 
-    public String getAbsoluteFilename() {
-        return getAbsolutePathName() + SystemProperties.FILE_SEPARATOR.value() + getFilename();
+    /**
+     * Gets the absolute filename.
+     * 
+     * @param path the path
+     * @return the absolute filename
+     */
+    public String getAbsoluteFilename(final String path) {
+        return getAbsolutePathName(path) + SystemProperties.FILE_SEPARATOR.value() + getFilename();
     }
 }
